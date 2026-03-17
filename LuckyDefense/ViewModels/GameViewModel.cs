@@ -63,6 +63,7 @@ public partial class GameViewModel : ObservableObject
     private const int BuyUnitCost = 50;
 
     public GameEngine Engine { get; } = new();
+    public GameEngine OpponentEngine { get; } = new(); // local simulation of opponent's board
     public GameBoardDrawable Drawable { get; } = new();
 
     private IDispatcherTimer? _gameTimer;
@@ -71,14 +72,18 @@ public partial class GameViewModel : ObservableObject
 
     // Multiplayer
     private FirebaseService? _firebase;
-    private IDisposable? _opponentHealthListener;
+    private IDisposable? _opponentStateListener;
     private IDisposable? _roomStatusListener;
     private string? _opponentId;
     private bool _isSoloMode;
     private int _lastSyncedHealth = 100;
     private float _syncTimer;
-    private const float SyncInterval = 1f; // sync every 1 second
+    private const float SyncInterval = 0.3f;
     private int _lastWave;
+    private int _lastUnitCount;
+    private int _lastClearedWave;
+    private float _opponentPollTimer;
+    private bool _pollingOpponent;
 
     public string WaveText => CurrentWave == 0 ? "Ready" : $"Wave {CurrentWave}";
     public string BuyUnitButtonText => $"Buy Unit ({BuyUnitCost})";
@@ -111,22 +116,34 @@ public partial class GameViewModel : ObservableObject
     public void Initialize(IDispatcher dispatcher)
     {
         Drawable.Engine = Engine;
+        Drawable.OpponentEngine = OpponentEngine;
         SoundService.Instance.Initialize();
 
         _isSoloMode = RoomCode == "solo-test";
+        Engine.IsMultiplayer = !_isSoloMode;
+        OpponentEngine.IsMultiplayer = !_isSoloMode;
 
         _gameTimer = dispatcher.CreateTimer();
         _gameTimer.Interval = TimeSpan.FromMilliseconds(33); // ~30 FPS
         _gameTimer.Tick += OnGameTick;
         _lastUpdate = DateTime.UtcNow;
 
-        Engine.CurrentWave = 0;
-        Engine.WaveCountdown = 3f;
-        _gameStarted = true;
         _gameTimer.Start();
 
-        if (!_isSoloMode)
+        if (_isSoloMode)
+        {
+            Engine.CurrentWave = 0;
+            Engine.WaveCountdown = 3f;
+            _gameStarted = true;
+        }
+        else
+        {
+            // Don't start game yet — wait for both players to be ready
+            Engine.WaitingToStart = true;
+            Engine.WaveCountdown = 999f; // will be reset when both ready
+            _gameStarted = false;
             _ = SetupMultiplayer();
+        }
     }
 
     private async Task SetupMultiplayer()
@@ -134,48 +151,59 @@ public partial class GameViewModel : ObservableObject
         try
         {
             _firebase = new FirebaseService();
+            StatusText = $"Room: {RoomCode}, Me: {_firebase.DeviceId[..6]}";
+
             _opponentId = await _firebase.GetOpponentId(RoomCode);
+
+            for (int retry = 0; retry < 10 && _opponentId == null; retry++)
+            {
+                StatusText = $"Finding opponent... ({retry + 1})";
+                await Task.Delay(1500);
+                _opponentId = await _firebase.GetOpponentId(RoomCode);
+            }
 
             if (_opponentId != null)
             {
-                // Listen to opponent's health
-                _opponentHealthListener = _firebase.ListenToOpponentHealth(
-                    RoomCode, _opponentId, (health) =>
-                    {
-                        MainThread.BeginInvokeOnMainThread(() =>
-                        {
-                            OpponentHealth = health;
-                            Drawable.OpponentHealth = health;
+                StatusText = "Syncing with opponent...";
 
-                            // Opponent died — we win!
-                            if (health <= 0 && !IsGameOver)
-                            {
-                                IsGameOver = true;
-                                GameOverText = "You Win!";
-                                _gameTimer?.Stop();
-                            }
-                        });
-                    });
+                // Signal that we're ready
+                await _firebase.SetReady(RoomCode, _firebase.DeviceId);
 
-                // Listen for room status changes (e.g., opponent disconnects)
-                _roomStatusListener = _firebase.ListenToRoomStatus(
-                    RoomCode, (status) =>
-                    {
-                        MainThread.BeginInvokeOnMainThread(() =>
-                        {
-                            if (status == "finished" && !IsGameOver)
-                            {
-                                IsGameOver = true;
-                                GameOverText = "Game Over";
-                                _gameTimer?.Stop();
-                            }
-                        });
-                    });
+                // Wait for opponent to also be ready
+                for (int i = 0; i < 20; i++)
+                {
+                    bool oppReady = await _firebase.IsOpponentReady(RoomCode, _opponentId);
+                    if (oppReady) break;
+                    await Task.Delay(500);
+                }
+
+                // Both ready — start the game simultaneously
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    Engine.CurrentWave = 0;
+                    Engine.WaveCountdown = 3f;
+                    Engine.WaitingToStart = true;
+                    _gameStarted = true;
+                    _lastUpdate = DateTime.UtcNow;
+
+                    // Start opponent engine too
+                    OpponentEngine.CurrentWave = 0;
+                    OpponentEngine.WaveCountdown = 3f;
+                    OpponentEngine.WaitingToStart = true;
+
+                    StatusText = "Game starting!";
+                });
+                // Start background polling loop for opponent data
+                _ = PollOpponentLoop();
+            }
+            else
+            {
+                StatusText = "Opponent not found!";
             }
         }
         catch (Exception ex)
         {
-            StatusText = $"MP Error: {ex.Message}";
+            StatusText = $"MP Error: {ex.Message[..Math.Min(40, ex.Message.Length)]}";
         }
     }
 
@@ -189,6 +217,16 @@ public partial class GameViewModel : ObservableObject
         delta = MathF.Min(delta, 0.1f);
 
         Engine.Update(delta);
+
+        // Run opponent simulation locally (smooth 30fps)
+        if (!_isSoloMode)
+        {
+            OpponentEngine.BoardWidth = Engine.BoardWidth;
+            OpponentEngine.BoardHeight = Engine.BoardHeight;
+            if (OpponentEngine.PathPoints.Count == 0)
+                OpponentEngine.BuildPath();
+            OpponentEngine.Update(delta);
+        }
 
         // Tick pull notification
         if (_pullNotificationTimer > 0)
@@ -211,11 +249,18 @@ public partial class GameViewModel : ObservableObject
         Money = Engine.Money;
         CurrentWave = Engine.CurrentWave;
 
-        // Wave start sound + boss alert
+        // Wave start sound + boss alert + sync opponent engine wave
         if (CurrentWave > _lastWave)
         {
             _lastWave = CurrentWave;
             SoundService.Instance.Play("wave_start");
+
+            // Keep opponent engine in sync with our wave
+            if (!_isSoloMode && OpponentEngine.CurrentWave < CurrentWave)
+            {
+                OpponentEngine.WaitingToStart = false;
+                OpponentEngine.StartNextWave();
+            }
 
             if (Engine.IsBossWave)
             {
@@ -234,6 +279,8 @@ public partial class GameViewModel : ObservableObject
         // Update status text
         if (Engine.WaitingToStart)
             StatusText = $"Starting in {(int)Engine.WaveCountdown + 1}s...";
+        else if (Engine.WaitingForOpponent)
+            StatusText = "Waiting for opponent...";
         else if (!Engine.IsWaveActive && Engine.WaveCountdown > 0)
             StatusText = $"Next wave in {(int)Engine.WaveCountdown + 1}s";
         else
@@ -276,37 +323,181 @@ public partial class GameViewModel : ObservableObject
                 _ = SyncHealthToFirebase(0);
         }
 
-        // Sync health to Firebase periodically
-        if (!_isSoloMode)
+        // Multiplayer sync
+        if (!_isSoloMode && _firebase != null && _opponentId != null)
         {
             _syncTimer += delta;
-            if (_syncTimer >= SyncInterval && Health != _lastSyncedHealth)
+            if (_syncTimer >= SyncInterval)
             {
                 _syncTimer = 0;
-                _lastSyncedHealth = Health;
-                _ = SyncHealthToFirebase(Health);
+
+                // Sync health
+                if (Health != _lastSyncedHealth)
+                {
+                    _lastSyncedHealth = Health;
+                    _ = SyncHealthToFirebase(Health);
+                }
+
+                // Sync units when count changes (buy/merge)
+                if (Engine.Units.Count != _lastUnitCount)
+                {
+                    _lastUnitCount = Engine.Units.Count;
+                    _ = SyncUnitsToFirebase();
+                }
+            }
+
+            // Sync wave cleared immediately when it happens
+            if (Engine.WaveCleared && CurrentWave > _lastClearedWave)
+            {
+                _lastClearedWave = CurrentWave;
+                _ = _firebase.SetWaveCleared(RoomCode, DeviceId, CurrentWave);
             }
         }
+
+        Drawable.IsSoloMode = _isSoloMode;
 
         // Request redraw
         OnPropertyChanged(nameof(Drawable));
     }
 
+    private async Task PollOpponentLoop()
+    {
+        _pollingOpponent = true;
+        while (_pollingOpponent && !IsGameOver)
+        {
+            try
+            {
+                if (_firebase != null && _opponentId != null)
+                {
+                    var state = await _firebase.GetOpponentFullState(RoomCode, _opponentId);
+
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        // Health — use opponent's REAL health from Firebase
+                        OpponentHealth = state.Health;
+                        Drawable.OpponentHealth = state.Health;
+                        OpponentEngine.Health = state.Health;
+
+                        if (state.Health <= 0 && !IsGameOver)
+                        {
+                            IsGameOver = true;
+                            GameOverText = "You Win!";
+                            _gameTimer?.Stop();
+                            SoundService.Instance.Play("win");
+                        }
+
+                        // Wave sync
+                        if (Engine.WaitingForOpponent && state.WaveCleared >= CurrentWave)
+                        {
+                            Engine.WaitingForOpponent = false;
+                            Engine.WaveCountdown = 10f;
+                            // Also start opponent engine's next wave
+                            OpponentEngine.WaitingForOpponent = false;
+                            OpponentEngine.WaveCountdown = 10f;
+                        }
+
+                        // Sync opponent's units into opponent engine
+                        if (state.Units != null)
+                        {
+                            SyncUnitsToOpponentEngine(state.Units);
+                        }
+                    });
+                }
+            }
+            catch { }
+
+            await Task.Delay(500); // Only need to poll actions, not positions
+        }
+    }
+
+    private void SyncUnitsToOpponentEngine(List<UnitSyncData> units)
+    {
+        // Clear and rebuild opponent units from Firebase data
+        OpponentEngine.Units.Clear();
+        foreach (var u in units)
+        {
+            // Get stats based on rarity
+            var (_, name, basePower, attackRange, attackSpeed, _) = GetUnitStats(u.Rarity);
+            OpponentEngine.PlaceUnit(u.Rarity, name, basePower, attackRange, attackSpeed, u.Rarity, u.Col, u.Row);
+            // Set the level on the placed unit
+            var placed = OpponentEngine.Units.LastOrDefault();
+            if (placed != null) placed.Level = u.Level;
+        }
+    }
+
+    private (int id, string name, int basePower, float attackRange, float attackSpeed, int rarity) GetUnitStats(int rarity)
+    {
+        return rarity switch
+        {
+            4 => (4, "Dragon", 60, 3.5f, 1.0f, 4),
+            3 => (3, "Wizard", 35, 3.0f, 1.5f, 3),
+            2 => (2, "Knight", 20, 2.5f, 2.0f, 2),
+            _ => (1, "Soldier", 12, 2.0f, 2.5f, 1),
+        };
+    }
+
     private async Task SyncHealthToFirebase(int health)
+    {
+        if (_firebase == null) return;
+        try { await _firebase.UpdateHealth(RoomCode, DeviceId, health); }
+        catch { }
+    }
+
+    private async Task SyncUnitsToFirebase()
     {
         if (_firebase == null) return;
         try
         {
-            await _firebase.UpdateHealth(RoomCode, DeviceId, health);
+            var unitData = Engine.Units.Select(u => new UnitSyncData
+            {
+                Col = u.GridX,
+                Row = u.GridY,
+                Rarity = u.Rarity,
+                Level = u.Level
+            }).ToList();
+            await _firebase.SyncUnits(RoomCode, DeviceId, unitData);
         }
-        catch { /* Ignore sync errors to not interrupt gameplay */ }
+        catch { }
     }
+
+    private async Task PollOpponentData()
+    {
+        if (_firebase == null || _opponentId == null) return;
+        try
+        {
+            // Single fetch for all opponent data
+            var state = await _firebase.GetOpponentFullState(RoomCode, _opponentId);
+
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                // Wave sync — unlock if opponent also cleared this wave
+                if (Engine.WaitingForOpponent && state.WaveCleared >= CurrentWave)
+                {
+                    Engine.WaitingForOpponent = false;
+                    Engine.WaveCountdown = 10f;
+                }
+
+                // Opponent health
+                OpponentHealth = state.Health;
+                Drawable.OpponentHealth = state.Health;
+
+                // Sync opponent's units into opponent engine
+                if (state.Units != null)
+                {
+                    SyncUnitsToOpponentEngine(state.Units);
+                }
+            });
+        }
+        catch { }
+    }
+
 
     public void Cleanup()
     {
         _gameTimer?.Stop();
         _gameStarted = false;
-        _opponentHealthListener?.Dispose();
+        _pollingOpponent = false;
+        _opponentStateListener?.Dispose();
         _roomStatusListener?.Dispose();
     }
 

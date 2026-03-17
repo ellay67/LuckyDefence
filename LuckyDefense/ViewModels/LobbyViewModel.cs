@@ -7,9 +7,8 @@ namespace LuckyDefense.ViewModels;
 public partial class LobbyViewModel : ObservableObject
 {
     private readonly FirebaseService _firebase;
-    private IDisposable? _opponentListener;
-    private IDisposable? _statusListener;
     private string? _roomCode;
+    private bool _cancelled;
 
     [ObservableProperty]
     private bool isSearching;
@@ -25,6 +24,7 @@ public partial class LobbyViewModel : ObservableObject
     public async Task StartMatchmaking()
     {
         IsSearching = true;
+        _cancelled = false;
         StatusMessage = "Looking for a match...";
 
         try
@@ -32,12 +32,16 @@ public partial class LobbyViewModel : ObservableObject
             // Try to find an open room
             string? existingRoom = await _firebase.FindOpenRoom();
 
+            if (_cancelled) return;
+
             if (existingRoom != null)
             {
                 // Join existing room
                 _roomCode = existingRoom;
                 StatusMessage = "Opponent found! Joining...";
                 await _firebase.JoinRoom(_roomCode);
+
+                if (_cancelled) return;
                 await NavigateToGame();
             }
             else
@@ -46,21 +50,46 @@ public partial class LobbyViewModel : ObservableObject
                 _roomCode = await _firebase.CreateRoom();
                 StatusMessage = "Waiting for opponent...";
 
-                _opponentListener = _firebase.ListenForOpponent(_roomCode, async (guestId) =>
-                {
-                    _opponentListener?.Dispose();
-                    MainThread.BeginInvokeOnMainThread(async () =>
-                    {
-                        StatusMessage = "Opponent found! Starting...";
-                        await NavigateToGame();
-                    });
-                });
+                if (_cancelled) return;
+
+                // Poll for opponent joining (more reliable than listener)
+                await PollForOpponent();
             }
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Error: {ex.Message}";
-            IsSearching = false;
+            if (!_cancelled)
+            {
+                StatusMessage = $"Error: {ex.Message}";
+                IsSearching = false;
+            }
+        }
+    }
+
+    private async Task PollForOpponent()
+    {
+        while (!_cancelled)
+        {
+            await Task.Delay(1500);
+            if (_cancelled || _roomCode == null) return;
+
+            try
+            {
+                string? opponentId = await _firebase.GetOpponentId(_roomCode);
+                if (!string.IsNullOrEmpty(opponentId))
+                {
+                    if (_cancelled) return;
+                    StatusMessage = "Opponent found! Starting...";
+                    await Task.Delay(500);
+                    if (_cancelled) return;
+                    await NavigateToGame();
+                    return;
+                }
+            }
+            catch
+            {
+                // Retry on next poll
+            }
         }
     }
 
@@ -78,11 +107,9 @@ public partial class LobbyViewModel : ObservableObject
     [RelayCommand]
     private async Task Cancel()
     {
+        _cancelled = true;
         IsSearching = false;
-        _opponentListener?.Dispose();
-        _statusListener?.Dispose();
 
-        // Clean up room if we created one
         if (_roomCode != null)
         {
             try { await _firebase.DeleteRoom(_roomCode); } catch { }

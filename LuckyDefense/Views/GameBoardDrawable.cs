@@ -7,7 +7,9 @@ public class GameBoardDrawable : IDrawable
     public GameEngine? Engine { get; set; }
 
     public int OpponentHealth { get; set; } = 100;
-    public List<(int col, int row, int rarity, int level)> OpponentUnits { get; set; } = new();
+    public GameEngine? OpponentEngine { get; set; }
+    public bool IsSoloMode { get; set; }
+
 
     // Terrain colors
     private static readonly Color GrassLight = Color.FromArgb("#2d5a27");
@@ -64,6 +66,22 @@ public class GameBoardDrawable : IDrawable
         float totalW = dirtyRect.Width;
         float totalH = dirtyRect.Height;
 
+        if (IsSoloMode)
+        {
+            // Solo: full screen for player board
+            Engine.BoardWidth = totalW;
+            Engine.BoardHeight = totalH;
+            if (Engine.PathPoints.Count == 0)
+                Engine.BuildPath();
+            if (_decorations == null)
+                GenerateDecorations();
+
+            DrawPlayerBoard(canvas, totalW, totalH);
+            DrawOverlay(canvas, dirtyRect, totalH);
+            return;
+        }
+
+        // Multiplayer: split screen
         float playerH = totalH * 0.58f;
         float divH = 3f;
         float oppH = totalH - playerH - divH;
@@ -72,8 +90,6 @@ public class GameBoardDrawable : IDrawable
         Engine.BoardHeight = playerH;
         if (Engine.PathPoints.Count == 0)
             Engine.BuildPath();
-
-        // Generate decorations once
         if (_decorations == null)
             GenerateDecorations();
 
@@ -744,40 +760,88 @@ public class GameBoardDrawable : IDrawable
 
     private void DrawOpponentBoard(ICanvas canvas, float w, float h)
     {
+        if (OpponentEngine == null) return;
+
+        // Set opponent engine board dimensions for this frame
+        OpponentEngine.BoardWidth = w;
+        OpponentEngine.BoardHeight = h;
+
         float cw = w / GameEngine.GridColumns;
         float ch = h / GameEngine.GridRows;
 
-        // Simplified opponent board with same terrain feel
-        for (int c = 0; c < GameEngine.GridColumns; c++)
+        // Full terrain
+        canvas.FillColor = GrassLight;
+        canvas.FillRectangle(0, 0, w, h);
+
+        var rng2 = new Random(999);
+        for (int i = 0; i < 15; i++)
         {
-            for (int r = 0; r < GameEngine.GridRows; r++)
+            float px = (float)rng2.NextDouble() * w;
+            float py = (float)rng2.NextDouble() * h;
+            float ps = 15 + (float)rng2.NextDouble() * 30;
+            canvas.FillColor = rng2.NextDouble() > 0.5 ? GrassDark : GrassPatch;
+            canvas.FillEllipse(px - ps / 2, py - ps / 2, ps, ps * 0.7f);
+        }
+
+        // Dirt path
+        canvas.FillColor = PathDirt;
+        canvas.FillRectangle(0, 0, w, ch);
+        canvas.FillRectangle(w - cw, 0, cw, h);
+        canvas.FillRectangle(0, h - ch, w, ch);
+        canvas.FillRectangle(0, 0, cw, h);
+
+        canvas.FillColor = PathEdge;
+        canvas.FillRectangle(cw, ch - 1, w - 2 * cw, 2);
+        canvas.FillRectangle(cw, h - ch, w - 2 * cw, 2);
+        canvas.FillRectangle(cw - 1, ch, 2, h - 2 * ch);
+        canvas.FillRectangle(w - cw, ch, 2, h - 2 * ch);
+
+        // Portals
+        DrawPortal(canvas, 0.5f * cw, 0.5f * ch, cw * 0.3f, true);
+        DrawPortal(canvas, 0.5f * cw, 1.5f * ch, cw * 0.25f, false);
+
+        // Draw opponent units from opponent engine — full character models
+        foreach (var unit in OpponentEngine.Units)
+        {
+            float cx = unit.GridX * cw + cw / 2;
+            float cy = unit.GridY * ch + ch / 2;
+            float size = MathF.Min(cw, ch) * 0.28f;
+
+            switch (unit.Rarity)
             {
-                bool isBorder = (r == 0 || r == GameEngine.GridRows - 1 || c == 0 || c == GameEngine.GridColumns - 1);
-                canvas.FillColor = isBorder ? PathDirt.WithAlpha(0.5f) : Color.FromArgb("#0d1a0d");
-                canvas.FillRectangle(c * cw, r * ch, cw, ch);
+                case 1: DrawSlime(canvas, cx, cy, size, unit.Level); break;
+                case 2: DrawArcher(canvas, cx, cy, size, unit.Level); break;
+                case 3: DrawWizard(canvas, cx, cy, size, unit.Level); break;
+                case 4: DrawDragon(canvas, cx, cy, size, unit.Level); break;
+                default: DrawSlime(canvas, cx, cy, size, unit.Level); break;
             }
         }
 
-        foreach (var (col, row, rarity, level) in OpponentUnits)
+        // Draw opponent enemies from opponent engine — smooth 30fps local simulation
+        foreach (var enemy in OpponentEngine.Enemies)
         {
-            float cx = col * cw + cw / 2;
-            float cy = row * ch + ch / 2;
-            float size = MathF.Min(cw, ch) * 0.25f;
-            // Simplified unit drawing for opponent
-            Color unitColor = rarity switch
-            {
-                2 => ArcherBody,
-                3 => WizardBody,
-                4 => DragonBody,
-                _ => SlimeBody
-            };
-            canvas.FillColor = unitColor;
-            canvas.FillCircle(cx, cy, size);
-            canvas.FontColor = Colors.White;
-            canvas.FontSize = size * 0.8f;
-            canvas.DrawString(level.ToString(), cx - size, cy - size,
-                size * 2, size * 2,
-                HorizontalAlignment.Center, VerticalAlignment.Center);
+            if (!enemy.IsAlive) continue;
+            // Scale enemy position from opponent engine coords to this board's coords
+            float ex = OpponentEngine.BoardWidth > 0 ? enemy.X / OpponentEngine.BoardWidth * w : enemy.X;
+            float ey = OpponentEngine.BoardHeight > 0 ? enemy.Y / OpponentEngine.BoardHeight * h : enemy.Y;
+            float size = cw * (enemy.IsBoss ? 0.35f : enemy.IsMiniBoss ? 0.26f : 0.16f);
+
+            if (enemy.IsBoss || enemy.IsMiniBoss)
+                DrawBossGoblin(canvas, ex, ey, size, enemy.Health / enemy.MaxHealth);
+            else
+                DrawGoblin(canvas, ex, ey, size, enemy.Health / enemy.MaxHealth);
+        }
+
+        // Draw opponent projectiles
+        foreach (var proj in OpponentEngine.Projectiles)
+        {
+            if (!proj.IsActive) continue;
+            float px = OpponentEngine.BoardWidth > 0 ? proj.X / OpponentEngine.BoardWidth * w : proj.X;
+            float py = OpponentEngine.BoardHeight > 0 ? proj.Y / OpponentEngine.BoardHeight * h : proj.Y;
+            canvas.FillColor = ProjectileColor.WithAlpha(0.3f);
+            canvas.FillCircle(px, py, 4);
+            canvas.FillColor = ProjectileColor;
+            canvas.FillCircle(px, py, 2);
         }
 
         // Opponent HP badge

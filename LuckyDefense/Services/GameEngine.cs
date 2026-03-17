@@ -25,7 +25,11 @@ public class GameEngine
     public bool EnemyDiedThisFrame { get; set; }
     public bool UnitFiredThisFrame { get; set; }
     public int LastFiredRarity { get; set; }
-    public bool BossWaveStarted { get; set; }   // true on the frame a boss wave begins
+    public bool BossWaveStarted { get; set; }
+    public bool WaveCleared { get; set; }       // true when this player finished current wave
+    public bool WaitingForOpponent { get; set; } // true when waiting for opponent to finish wave
+    public bool IsMultiplayer { get; set; }
+    public bool OpponentWaveCleared { get; set; } // set externally from Firebase
     public bool IsBossWave => CurrentWave > 0 && CurrentWave % 10 == 0;
     public bool IsMiniBossWave => CurrentWave > 0 && CurrentWave % 5 == 0 && !IsBossWave;
     public int EnemiesSpawned { get; set; }
@@ -143,15 +147,29 @@ public class GameEngine
         if (IsWaveActive && EnemiesSpawned >= EnemiesThisWave && Enemies.Count == 0)
         {
             IsWaveActive = false;
-            WaveCountdown = 10f;
+            WaveCleared = true;
             GiveRoundIncome();
+
+            if (IsMultiplayer)
+            {
+                WaitingForOpponent = true;
+                // ViewModel handles checking opponent and starting countdown
+            }
+            else
+            {
+                WaveCountdown = 10f;
+            }
         }
 
-        if (!IsWaveActive)
+        // Countdown to next wave (only if not waiting for opponent)
+        if (!IsWaveActive && !WaitingForOpponent && WaveCountdown > 0)
         {
             WaveCountdown -= deltaTime;
             if (WaveCountdown <= 0)
+            {
+                WaveCleared = false;
                 StartNextWave();
+            }
         }
     }
 
