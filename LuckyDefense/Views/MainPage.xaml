@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LuckyDefense.ViewModels"
+             x:Class="LuckyDefense.Views.MainPage"
+             Title="Lucky Defense"
+             BackgroundColor="#0a0e1a"
+             Shell.NavBarIsVisible="False">
+
+    <ContentPage.BindingContext>
+        <vm:MainViewModel />
+    </ContentPage.BindingContext>
+
+    <Grid>
+        <!-- Background gradient effect -->
+        <BoxView Color="#0f1729" VerticalOptions="Fill" HorizontalOptions="Fill" />
+
+        <VerticalStackLayout
+            VerticalOptions="Center"
+            HorizontalOptions="Center"
+            Spacing="15"
+            Padding="40">
+
+            <!-- Shield icon area -->
+            <Border StrokeShape="RoundRectangle 40"
+                    Stroke="#e94560"
+                    StrokeThickness="3"
+                    HeightRequest="80"
+                    WidthRequest="80"
+                    HorizontalOptions="Center"
+                    BackgroundColor="#1a0a20"
+                    Margin="0,0,0,5">
+                <Label Text="LD"
+                       FontSize="30"
+                       FontAttributes="Bold"
+                       TextColor="#e94560"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+            </Border>
+
+            <!-- Title -->
+            <Label Text="LUCKY"
+                   FontSize="44"
+                   FontAttributes="Bold"
+                   TextColor="#e94560"
+                   HorizontalOptions="Center"
+                   LineHeight="0.9" />
+            <Label Text="DEFENSE"
+                   FontSize="44"
+                   FontAttributes="Bold"
+                   TextColor="White"
+                   HorizontalOptions="Center"
+                   Margin="0,-12,0,0" />
+
+            <Label Text="Tower Defense with a Twist of Luck"
+                   FontSize="14"
+                   TextColor="#6b7b8d"
+                   HorizontalOptions="Center"
+                   Margin="0,0,0,20" />
+
+            <!-- Play button -->
+            <Border StrokeShape="RoundRectangle 16"
+                    Stroke="Transparent"
+                    BackgroundColor="#e94560"
+                    HeightRequest="58"
+                    WidthRequest="240"
+                    HorizontalOptions="Center"
+                    >
+                <Grid>
+                    <Button Text="PLAY ONLINE"
+                            Command="{Binding PlayCommand}"
+                            BackgroundColor="Transparent"
+                            TextColor="White"
+                            FontSize="20"
+                            FontAttributes="Bold" />
+                </Grid>
+            </Border>
+
+            <!-- Solo button -->
+            <Border StrokeShape="RoundRectangle 14"
+                    Stroke="#533483"
+                    StrokeThickness="2"
+                    BackgroundColor="#1a0a2e"
+                    HeightRequest="50"
+                    WidthRequest="240"
+                    HorizontalOptions="Center">
+                <Grid>
+                    <Button Text="SOLO PRACTICE"
+                            Clicked="OnSoloTestClicked"
+                            BackgroundColor="Transparent"
+                            TextColor="#b388ff"
+                            FontSize="16"
+                            FontAttributes="Bold" />
+                </Grid>
+            </Border>
+
+            <!-- Settings button -->
+            <Border StrokeShape="RoundRectangle 14"
+                    Stroke="#2a3a4e"
+                    StrokeThickness="1"
+                    BackgroundColor="Transparent"
+                    HeightRequest="46"
+                    WidthRequest="240"
+                    HorizontalOptions="Center">
+                <Grid>
+                    <Button Text="SETTINGS"
+                            Command="{Binding SettingsCommand}"
+                            BackgroundColor="Transparent"
+                            TextColor="#6b7b8d"
+                            FontSize="15" />
+                </Grid>
+            </Border>
+
+            <!-- Version -->
+            <Label Text="v1.0"
+                   FontSize="11"
+                   TextColor="#333"
+                   HorizontalOptions="Center"
+                   Margin="0,15,0,0" />
+
+        </VerticalStackLayout>
+    </Grid>
+
+</ContentPage>

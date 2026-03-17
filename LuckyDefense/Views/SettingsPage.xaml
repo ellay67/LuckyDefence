@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LuckyDefense.ViewModels"
+             x:Class="LuckyDefense.Views.SettingsPage"
+             Title="Settings"
+             BackgroundColor="#0a0e1a"
+             Shell.NavBarIsVisible="False">
+
+    <ContentPage.BindingContext>
+        <vm:SettingsViewModel />
+    </ContentPage.BindingContext>
+
+    <VerticalStackLayout
+        Padding="30"
+        Spacing="15"
+        VerticalOptions="Start">
+
+        <Label Text="SETTINGS"
+               FontSize="26"
+               FontAttributes="Bold"
+               TextColor="White"
+               HorizontalOptions="Center"
+               Margin="0,20,0,25" />
+
+        <!-- Sound setting -->
+        <Frame BackgroundColor="#16213e"
+               BorderColor="#1a3a5c"
+               CornerRadius="12"
+               Padding="16,12"
+               HasShadow="False">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Label Grid.Column="0" Text="Sound"
+                       TextColor="White" FontSize="17"
+                       VerticalOptions="Center" />
+                <Label Grid.Column="1" Text="Game sound effects"
+                       TextColor="#556677" FontSize="12"
+                       VerticalOptions="Center" Margin="10,0,0,0" />
+                <Switch Grid.Column="2"
+                        IsToggled="{Binding SoundEnabled}"
+                        OnColor="#e94560" />
+            </Grid>
+        </Frame>
+
+        <!-- Vibration setting -->
+        <Frame BackgroundColor="#16213e"
+               BorderColor="#1a3a5c"
+               CornerRadius="12"
+               Padding="16,12"
+               HasShadow="False">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Label Grid.Column="0" Text="Vibration"
+                       TextColor="White" FontSize="17"
+                       VerticalOptions="Center" />
+                <Label Grid.Column="1" Text="When enemies leak"
+                       TextColor="#556677" FontSize="12"
+                       VerticalOptions="Center" Margin="10,0,0,0" />
+                <Switch Grid.Column="2"
+                        IsToggled="{Binding VibrationEnabled}"
+                        OnColor="#e94560" />
+            </Grid>
+        </Frame>
+
+        <!-- Info section -->
+        <Frame BackgroundColor="#0f1729"
+               BorderColor="#1a2a3e"
+               CornerRadius="12"
+               Padding="16"
+               HasShadow="False"
+               Margin="0,10,0,0">
+            <VerticalStackLayout Spacing="6">
+                <Label Text="ABOUT THE GAME"
+                       FontSize="12"
+                       FontAttributes="Bold"
+                       TextColor="#445566" />
+                <Label Text="Lucky Defense is a two-player tower defense game where you buy random units, upgrade your luck, and merge units to create stronger defenders."
+                       FontSize="12"
+                       TextColor="#334455"
+                       LineHeight="1.4" />
+            </VerticalStackLayout>
+        </Frame>
+
+        <!-- Back button -->
+        <Border StrokeShape="RoundRectangle 14"
+                Stroke="#2a3a4e"
+                StrokeThickness="1"
+                BackgroundColor="Transparent"
+                HeightRequest="50"
+                WidthRequest="200"
+                HorizontalOptions="Center"
+                Margin="0,20,0,0">
+            <Grid>
+                <Button Text="BACK"
+                        Command="{Binding BackCommand}"
+                        BackgroundColor="Transparent"
+                        TextColor="#6b7b8d"
+                        FontSize="16" />
+            </Grid>
+        </Border>
+
+    </VerticalStackLayout>
+
+</ContentPage>

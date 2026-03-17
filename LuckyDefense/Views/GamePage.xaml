@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LuckyDefense.ViewModels"
+             x:Class="LuckyDefense.Views.GamePage"
+             Title="Game"
+             BackgroundColor="#0a0e1a"
+             Shell.NavBarIsVisible="False">
+
+    <Grid>
+        <!-- Main game layout -->
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+            <!-- Top HUD bar -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Padding="12,10" BackgroundColor="#0f1729">
+                <!-- Health -->
+                <Border Grid.Column="0" StrokeShape="RoundRectangle 8"
+                        Stroke="#ff4757" StrokeThickness="1"
+                        BackgroundColor="#1a0a10" Padding="10,5"
+                        VerticalOptions="Center">
+                    <HorizontalStackLayout Spacing="4">
+                        <Label Text="HP" TextColor="#ff4757" FontSize="11" FontAttributes="Bold" VerticalOptions="Center" />
+                        <Label Text="{Binding Health}" TextColor="#ff6b81" FontSize="18" FontAttributes="Bold" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                </Border>
+
+                <!-- Wave -->
+                <Border Grid.Column="1" StrokeShape="RoundRectangle 8"
+                        Stroke="#2a3a4e" StrokeThickness="1"
+                        BackgroundColor="#0f1729" Padding="10,5"
+                        HorizontalOptions="Center" VerticalOptions="Center">
+                    <Label Text="{Binding WaveText}" TextColor="White" FontSize="15" FontAttributes="Bold" />
+                </Border>
+
+                <!-- Credits -->
+                <Border Grid.Column="2" StrokeShape="RoundRectangle 8"
+                        Stroke="#ffa502" StrokeThickness="1"
+                        BackgroundColor="#1a1500" Padding="10,5"
+                        VerticalOptions="Center">
+                    <HorizontalStackLayout Spacing="4">
+                        <Label Text="$" TextColor="#ffa502" FontSize="11" FontAttributes="Bold" VerticalOptions="Center" />
+                        <Label Text="{Binding Money}" TextColor="#ffd700" FontSize="18" FontAttributes="Bold" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                </Border>
+            </Grid>
+
+            <!-- Status bar -->
+            <Grid Grid.Row="1" ColumnDefinitions="*,*" Padding="12,5" BackgroundColor="#080c16">
+                <Label Grid.Column="0" Text="{Binding StatusText}" TextColor="#445566" FontSize="12" VerticalOptions="Center" />
+                <HorizontalStackLayout Grid.Column="1" HorizontalOptions="End" Spacing="4" VerticalOptions="Center">
+                    <Label Text="Enemy:" TextColor="#556677" FontSize="11" VerticalOptions="Center" />
+                    <Label Text="{Binding OpponentHealth}" TextColor="#ff9f43" FontSize="14" FontAttributes="Bold" VerticalOptions="Center" />
+                    <Label Text="HP" TextColor="#556677" FontSize="11" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+            </Grid>
+
+            <!-- Game board -->
+            <GraphicsView Grid.Row="2" x:Name="GameBoard" BackgroundColor="#0a0e1a" />
+
+            <!-- Bottom action bar -->
+            <Grid Grid.Row="3" RowDefinitions="Auto,Auto" Padding="10,6,10,8" BackgroundColor="#0f1729"
+                  RowSpacing="6">
+
+                <!-- Luck level display -->
+                <Grid Grid.Row="0" HorizontalOptions="Center" ColumnDefinitions="Auto,Auto" ColumnSpacing="6">
+                    <!-- Glow effect on upgrade -->
+                    <Border Grid.ColumnSpan="2"
+                            x:Name="LuckGlow"
+                            StrokeShape="RoundRectangle 12"
+                            Stroke="Transparent"
+                            BackgroundColor="#b388ff"
+                            Opacity="0"
+                            HorizontalOptions="Fill"
+                            VerticalOptions="Fill" />
+
+                    <Border Grid.Column="0" StrokeShape="RoundRectangle 8"
+                            Stroke="#533483" StrokeThickness="1"
+                            BackgroundColor="#1a0a2e"
+                            Padding="8,3" VerticalOptions="Center">
+                        <HorizontalStackLayout Spacing="4">
+                            <Label Text="LUCK" TextColor="#7c4dff" FontSize="10" FontAttributes="Bold" VerticalOptions="Center" />
+                            <Label Text="{Binding LuckLevel}" TextColor="#b388ff" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                    </Border>
+
+                    <Label Grid.Column="1" TextColor="#444" FontSize="10" VerticalOptions="Center"
+                           Text="{Binding LuckDescription}" />
+                </Grid>
+
+                <!-- Buttons row -->
+                <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <Border Grid.Column="0" StrokeShape="RoundRectangle 10"
+                            Stroke="Transparent"
+                            BackgroundColor="#e94560"
+                            HeightRequest="44">
+                        <Grid>
+                            <Button Text="{Binding BuyUnitButtonText}"
+                                    Command="{Binding BuyUnitCommand}"
+                                    BackgroundColor="Transparent"
+                                    TextColor="White"
+                                    FontSize="14"
+                                    FontAttributes="Bold" />
+                        </Grid>
+                    </Border>
+                    <Border Grid.Column="1" StrokeShape="RoundRectangle 10"
+                            Stroke="#533483" StrokeThickness="2"
+                            BackgroundColor="#1a0a2e"
+                            HeightRequest="44">
+                        <Grid>
+                            <Button Text="{Binding UpgradeLuckButtonText}"
+                                    Command="{Binding UpgradeLuckCommand}"
+                                    BackgroundColor="Transparent"
+                                    TextColor="#b388ff"
+                                    FontSize="13"
+                                    FontAttributes="Bold" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+
+        </Grid>
+
+        <!-- Boss Alert -->
+        <Border IsVisible="{Binding ShowBossAlert}"
+                StrokeShape="RoundRectangle 14"
+                StrokeThickness="2"
+                BackgroundColor="#EE1a0000"
+                HeightRequest="60"
+                WidthRequest="280"
+                HorizontalOptions="Center"
+                VerticalOptions="Start"
+                Margin="0,80,0,0">
+            <Border.Stroke>
+                <SolidColorBrush Color="#ff1744" />
+            </Border.Stroke>
+            <HorizontalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="10">
+                <Label Text="!!" TextColor="#ff1744" FontSize="26" FontAttributes="Bold" VerticalOptions="Center" />
+                <Label Text="{Binding BossAlertText}" TextColor="White" FontSize="20" FontAttributes="Bold" VerticalOptions="Center" />
+                <Label Text="!!" TextColor="#ff1744" FontSize="26" FontAttributes="Bold" VerticalOptions="Center" />
+            </HorizontalStackLayout>
+        </Border>
+
+        <!-- Pull Notification (Epic/Legendary) -->
+        <Border IsVisible="{Binding ShowPullNotification}"
+                StrokeShape="RoundRectangle 16"
+                StrokeThickness="2"
+                BackgroundColor="#EE1a1a2e"
+                HeightRequest="90"
+                WidthRequest="260"
+                HorizontalOptions="Center"
+                VerticalOptions="Center"
+                Margin="0,0,0,200">
+            <Border.Stroke>
+                <SolidColorBrush Color="#aa00ff" />
+            </Border.Stroke>
+            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Spacing="4">
+                <Label Text="{Binding PullNotificationText}"
+                       TextColor="White"
+                       FontSize="20"
+                       FontAttributes="Bold"
+                       HorizontalTextAlignment="Center"
+                       LineHeight="1.1" />
+            </VerticalStackLayout>
+        </Border>
+
+        <!-- Game Over Overlay -->
+        <Grid IsVisible="{Binding IsGameOver}" BackgroundColor="#DD080c16">
+            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Spacing="15">
+
+                <Border StrokeShape="RoundRectangle 40"
+                        Stroke="#e94560"
+                        StrokeThickness="3"
+                        HeightRequest="80"
+                        WidthRequest="80"
+                        HorizontalOptions="Center"
+                        BackgroundColor="#1a0a20">
+                    <Label Text="{Binding GameOverText, StringFormat='{0:0}'}"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           TextColor="#e94560"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"
+                           MaxLines="1" />
+                </Border>
+
+                <Label Text="{Binding GameOverText}"
+                       TextColor="White"
+                       FontSize="36"
+                       FontAttributes="Bold"
+                       HorizontalTextAlignment="Center" />
+
+                <Frame BackgroundColor="#16213e"
+                       BorderColor="#1a3a5c"
+                       CornerRadius="12"
+                       Padding="20,15"
+                       HasShadow="False"
+                       HorizontalOptions="Center">
+                    <VerticalStackLayout Spacing="5">
+                        <Label HorizontalTextAlignment="Center" TextColor="#8899aa" FontSize="14">
+                            <Label.FormattedText>
+                                <FormattedString>
+                                    <Span Text="Waves survived: " />
+                                    <Span Text="{Binding CurrentWave}" FontAttributes="Bold" TextColor="White" />
+                                </FormattedString>
+                            </Label.FormattedText>
+                        </Label>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Border StrokeShape="RoundRectangle 14"
+                        Stroke="Transparent"
+                        BackgroundColor="#e94560"
+                        HeightRequest="50"
+                        WidthRequest="220"
+                        HorizontalOptions="Center"
+                        Margin="0,10,0,0"
+                        >
+                    <Grid>
+                        <Button Text="BACK TO MENU"
+                                Command="{Binding BackToMainCommand}"
+                                BackgroundColor="Transparent"
+                                TextColor="White"
+                                FontSize="16"
+                                FontAttributes="Bold" />
+                    </Grid>
+                </Border>
+
+            </VerticalStackLayout>
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

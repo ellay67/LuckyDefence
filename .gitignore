@@ -1,0 +1,23 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.pdb
+*.exe
+
+## IDE
+.vs/
+.vscode/
+*.idea/
+
+## MAUI
+*.apk
+*.aab
+*.ipa
+
+## OS
+.DS_Store
+Thumbs.db

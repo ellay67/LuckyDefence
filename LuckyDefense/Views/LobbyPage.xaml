@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LuckyDefense.ViewModels"
+             x:Class="LuckyDefense.Views.LobbyPage"
+             Title="Matchmaking"
+             BackgroundColor="#0a0e1a"
+             Shell.NavBarIsVisible="False">
+
+    <ContentPage.BindingContext>
+        <vm:LobbyViewModel />
+    </ContentPage.BindingContext>
+
+    <Grid>
+        <VerticalStackLayout
+            VerticalOptions="Center"
+            HorizontalOptions="Center"
+            Spacing="25"
+            Padding="40">
+
+            <!-- Pulsing search icon -->
+            <Border StrokeShape="RoundRectangle 50"
+                    Stroke="#e94560"
+                    StrokeThickness="2"
+                    HeightRequest="100"
+                    WidthRequest="100"
+                    BackgroundColor="#16213e"
+                    HorizontalOptions="Center"
+                    IsVisible="{Binding IsSearching}">
+                <ActivityIndicator
+                    IsRunning="{Binding IsSearching}"
+                    Color="#e94560"
+                    HeightRequest="50"
+                    WidthRequest="50"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center" />
+            </Border>
+
+            <Label Text="SEARCHING FOR OPPONENT"
+                   FontSize="20"
+                   FontAttributes="Bold"
+                   TextColor="White"
+                   HorizontalOptions="Center"
+                   IsVisible="{Binding IsSearching}" />
+
+            <Label Text="{Binding StatusMessage}"
+                   FontSize="14"
+                   TextColor="#6b7b8d"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center" />
+
+            <!-- Animated dots / tips -->
+            <Frame BackgroundColor="#16213e"
+                   BorderColor="#1a3a5c"
+                   CornerRadius="12"
+                   Padding="20"
+                   HasShadow="False"
+                   IsVisible="{Binding IsSearching}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Tips while you wait:"
+                           FontSize="13"
+                           FontAttributes="Bold"
+                           TextColor="#8899aa" />
+                    <Label Text="Buy units to defend your base"
+                           FontSize="12"
+                           TextColor="#556677" />
+                    <Label Text="Upgrade luck for rarer units"
+                           FontSize="12"
+                           TextColor="#556677" />
+                    <Label Text="3 same units auto-merge to level up"
+                           FontSize="12"
+                           TextColor="#556677" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <Border StrokeShape="RoundRectangle 14"
+                    Stroke="#e94560"
+                    StrokeThickness="1"
+                    BackgroundColor="Transparent"
+                    HeightRequest="50"
+                    WidthRequest="220"
+                    HorizontalOptions="Center">
+                <Grid>
+                    <Button Text="CANCEL"
+                            Command="{Binding CancelCommand}"
+                            BackgroundColor="Transparent"
+                            TextColor="#e94560"
+                            FontSize="16"
+                            FontAttributes="Bold" />
+                </Grid>
+            </Border>
+
+        </VerticalStackLayout>
+    </Grid>
+
+</ContentPage>
